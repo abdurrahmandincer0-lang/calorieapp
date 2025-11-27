@@ -294,14 +294,14 @@ with tabs[1]:
     st.markdown("---")
     with st.expander(TXT['manual_water']):
         man_ml = st.number_input("ml", 0, 2000, 200)
-        if st.button(T[LANG].get('save', 'Save')): add_log_db('water', {'ml': man_ml}); st.rerun()
+        if st.button(T[LANG].get('save', 'Save'), key="su_man_kaydet_btn"): add_log_db('water', {'ml': man_ml}); st.rerun()
 
 # TAB 3: KİLO
 with tabs[2]:
     cur_w = float(prof.get('current_weight') or 70)
     st.metric(TXT['weight'], f"{cur_w} kg")
     new_w = st.number_input("Yeni Kilo", value=cur_w)
-    if st.button(TXT['save']):
+    if st.button(TXT['save'], key="kilo_kaydet_btn"):
         add_log_db('weight', {'kg': new_w})
         update_profile_db({'current_weight': new_w})
         st.success("OK!")
