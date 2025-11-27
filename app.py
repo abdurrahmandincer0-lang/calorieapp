@@ -6,7 +6,7 @@ import json
 import time
 from datetime import date, datetime, timedelta
 
-# --- 1. AYARLAR ---
+# --- 1. KONFİGÜRASYON ---
 st.set_page_config(page_title="Caloria Cloud", page_icon="🥑", layout="centered")
 
 # API Anahtarları
@@ -15,7 +15,7 @@ try:
     SUPA_URL = st.secrets["SUPABASE_URL"]
     SUPA_KEY = st.secrets["SUPABASE_KEY"]
 except:
-    st.error("🚨 Sırlar bulunamadı. .streamlit/secrets.toml dosyasını kontrol et.")
+    st.error("🚨 Sırlar bulunamadı. Lütfen .streamlit/secrets.toml dosyasını kontrol edin.")
     st.stop()
 
 genai.configure(api_key=GENAI_KEY)
@@ -36,11 +36,13 @@ T = {
         "coach_prompt": "Sen Türkçe konuşan bir diyetisyensin.",
         "onb_title": "Profilini Oluşturalım", "onb_desc": "Sana özel hedefler belirlememiz için bu bilgiler gerekli.",
         "water_target": "Su Hedefi (ml)", "manual_water": "Manuel Su Ekle (ml)",
-        "meal_select": "Hangi Öğün?",
-        "m_breakfast": "Kahvaltı", "m_lunch": "Öğle Yemeği", "m_dinner": "Akşam Yemeği", "m_snack": "Ara Öğün"
+        "meal_select": "Hangi Öğün?", "m_breakfast": "Kahvaltı", "m_lunch": "Öğle Yemeği", "m_dinner": "Akşam Yemeği", "m_snack": "Ara Öğün",
+        "login_title": "Giriş Yap", "signup_title": "Kayıt Ol", "email": "E-posta", "pass": "Şifre", 
+        "name": "Ad Soyad", "language": "Dil / Language", "login_btn": "Giriş Yap", "signup_btn": "Hesap Oluştur",
+        "pass_warn": "Şifre en az 6 karakter olmalı.", "info_warn": "Lütfen gerekli bilgileri doldurun."
     },
-    "EN": { "welcome": "Welcome", "streak": "Day", "dash_remain": "REMAINING", "dash_intake": "Intake", "dash_target": "Target", "menu": "Menu", "water": "Water", "weight": "Weight", "settings": "Settings", "food_add": "Add Food", "analyze": "Analyze", "ai_working": "Processing...", "save": "Save", "update": "Update", "logout": "Logout", "coach_prompt": "You are a dietitian.", "onb_title": "Setup Profile", "onb_desc": "We need this info to set your goals.", "water_target": "Water Target (ml)", "manual_water": "Manual Add (ml)", "meal_select": "Which Meal?", "m_breakfast": "Breakfast", "m_lunch": "Lunch", "m_dinner": "Dinner", "m_snack": "Snack" },
-    "AR": { "welcome": "Ahlan", "streak": "Yom", "dash_remain": "BA2Y", "dash_intake": "Akalt", "dash_target": "Hadaf", "menu": "Menu", "water": "Mayya", "weight": "Wazn", "settings": "E3dadat", "food_add": "Dakhal Akl", "analyze": "Hallel", "ai_working": "Lahza...", "save": "Hafez", "update": "Gaded", "logout": "Khorouj", "coach_prompt": "Enta doctor.", "onb_title": "Profil", "onb_desc": "Khallina netaraf 3alek.", "water_target": "Hadaf Mayya", "manual_water": "Edafa Yadawi", "meal_select": "Ay wajba?", "m_breakfast": "Fetar", "m_lunch": "Ghada", "m_dinner": "3asha", "m_snack": "Tasbira" }
+    "EN": { "welcome": "Welcome", "streak": "Day", "dash_remain": "REMAINING", "dash_intake": "Intake", "dash_target": "Target", "menu": "Menu", "water": "Water", "weight": "Weight", "settings": "Settings", "food_add": "Add Food", "analyze": "Analyze", "ai_working": "Processing...", "save": "Save", "update": "Update", "logout": "Logout", "coach_prompt": "You are a dietitian.", "onb_title": "Setup Profile", "onb_desc": "We need this info to set your goals.", "water_target": "Water Target (ml)", "manual_water": "Manual Add (ml)", "meal_select": "Which Meal?", "m_breakfast": "Breakfast", "m_lunch": "Lunch", "m_dinner": "Dinner", "m_snack": "Snack", "login_title": "Login", "signup_title": "Sign Up", "email": "Email", "pass": "Password", "name": "Full Name", "language": "Language", "login_btn": "Login", "signup_btn": "Sign Up", "pass_warn": "Password must be at least 6 characters.", "info_warn": "Please fill in the required information." },
+    "AR": { "welcome": "Ahlan", "streak": "Yom", "dash_remain": "BA2Y", "dash_intake": "Akalt", "dash_target": "Hadaf", "menu": "Menu", "water": "Mayya", "weight": "Wazn", "settings": "E3dadat", "food_add": "Dakhal Akl", "analyze": "Hallel", "ai_working": "Lahza...", "save": "Hafez", "update": "Gaded", "logout": "Khorouj", "coach_prompt": "Enta doctor.", "onb_title": "Profil", "onb_desc": "Khallina netaraf 3alek.", "water_target": "Hadaf Mayya", "manual_water": "Edafa Yadawi", "meal_select": "Ay wajba?", "m_breakfast": "Fetar", "m_lunch": "Ghada", "m_dinner": "3asha", "m_snack": "Tasbira", "login_title": "Dokhoul", "signup_title": "Tasgil", "email": "Email", "pass": "Password", "name": "Esam", "language": "Logha", "login_btn": "Dokhoul", "signup_btn": "Tasgil", "pass_warn": "Al kalam yajeb an yakun 6.", "info_warn": "Imla' al ma'loumat." }
 }
 
 # --- 3. CSS (Temiz Görünüm) ---
@@ -54,8 +56,6 @@ st.markdown("""
     .kutlama-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0,0,0,0.85); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
     .yesil-yazi { color: #10B981 !important; }
     .kirmizi-yazi { color: #EF4444 !important; }
-    
-    /* Öğün Kartları */
     .meal-header { font-weight: bold; margin-top: 15px; margin-bottom: 5px; color: #A0A0A0; font-size: 0.9em; text-transform: uppercase; letter-spacing: 1px;}
     </style>
 """, unsafe_allow_html=True)
@@ -72,7 +72,7 @@ def login(email, password):
         fetch_profile()
         st.rerun()
     except Exception as e:
-        st.error(f"Giriş başarısız: {e}")
+        st.error("Giriş başarısız. Bilgilerinizi kontrol edin.")
 
 def signup(email, password, name, lang):
     try:
@@ -147,22 +147,39 @@ def ai_analyze(prompt, img, lang):
 #  UYGULAMA AKIŞI
 # =========================================================
 
-# 1. GİRİŞ EKRANI
+# 1. GİRİŞ EKRANI (Dinamik Dil Desteği Eklendi)
 if not st.session_state['user']:
+    
+    # 1. Dil Seçici
+    col_lang, _ = st.columns([1, 3])
+    with col_lang:
+        lang_choice = st.selectbox("Dil / Language", ["TR", "EN", "AR"])
+    
+    # Seçilen dili kullanarak TXT sözlüğünü al
+    TXT_AUTH = T[lang_choice] 
+    
     st.markdown("<h1 style='text-align:center;'>⚡ Caloria Cloud</h1>", unsafe_allow_html=True)
-    tab1, tab2 = st.tabs(["Giriş Yap", "Kayıt Ol"])
+    tab1, tab2 = st.tabs([TXT_AUTH['login_title'], TXT_AUTH['signup_title']])
+    
     with tab1:
-        email = st.text_input("E-posta", key="l_email")
-        password = st.text_input("Şifre", type="password", key="l_pass")
-        if st.button("Giriş Yap", type="primary"): login(email, password)
+        email = st.text_input(TXT_AUTH['email'], key="l_email")
+        password = st.text_input(TXT_AUTH['pass'], type="password", key="l_pass")
+        if st.button(TXT_AUTH['login_btn'], type="primary"): 
+            login(email, password)
+            
     with tab2:
-        n_name = st.text_input("Ad Soyad")
-        n_email = st.text_input("E-posta", key="s_email")
-        n_pass = st.text_input("Şifre (Min 6)", type="password", key="s_pass")
-        n_lang = st.selectbox("Dil / Language", ["TR", "EN", "AR"])
-        if st.button("Hesap Oluştur"):
-            if n_email and len(n_pass) >= 6: signup(n_email, n_pass, n_name, n_lang)
-            else: st.warning("Bilgileri kontrol et.")
+        n_name = st.text_input(TXT_AUTH['name'])
+        n_email = st.text_input(TXT_AUTH['email'], key="s_email")
+        n_pass = st.text_input(TXT_AUTH['pass'] + " (Min 6)", type="password", key="s_pass")
+        # Language Selector removed from here, using the one above (lang_choice)
+        
+        if st.button(TXT_AUTH['signup_btn']):
+            if n_email and len(n_pass) >= 6: 
+                signup(n_email, n_pass, n_name, lang_choice) # Seçilen dili kaydet
+            elif len(n_pass) < 6:
+                st.warning(TXT_AUTH['pass_warn'])
+            else: 
+                st.warning(TXT_AUTH['info_warn'])
     st.stop()
 
 # 2. ONBOARDING
@@ -174,35 +191,38 @@ TXT = T[LANG]
 if not prof.get('current_weight') or not prof.get('height'):
     st.markdown(f"## {TXT['onb_title']}")
     st.info(TXT['onb_desc'])
+    
     with st.form("onboarding"):
         c1, c2 = st.columns(2)
-        yas = c1.number_input("Yaş", 10, 100, 25)
-        boy = c2.number_input("Boy (cm)", 100, 250, 170)
-        kilo = st.number_input("Kilo (kg)", 30.0, 200.0, 70.0)
-        hedef = st.number_input("Hedef Kilo (kg)", 30.0, 200.0, 65.0)
-        cinsiyet = st.selectbox("Cinsiyet", ["Erkek", "Kadın"])
-        aktivite = st.selectbox("Aktivite", ["Hareketsiz", "Az Hareketli", "Orta", "Çok Hareketli"])
+        yas = c1.number_input(T[LANG].get('age', 'Yaş'), 10, 100, 25)
+        boy = c2.number_input(T[LANG].get('height', 'Boy (cm)'), 100, 250, 170)
+        kilo = st.number_input(T[LANG].get('weight', 'Kilo (kg)'), 30.0, 200.0, 70.0)
+        hedef = st.number_input(T[LANG].get('target_weight', 'Hedef Kilo (kg)'), 30.0, 200.0, 65.0)
+        cinsiyet = st.selectbox(T[LANG].get('gender', 'Cinsiyet'), ["Erkek", "Kadın", "Male", "Female", "Ragel", "Set"])
+        aktivite = st.selectbox(T[LANG].get('activity', 'Aktivite Seviyesi'), ["Hareketsiz", "Az Hareketli", "Orta", "Çok Hareketli", "Sedentary", "Light", "Moderate", "High", "Antakh", "Noss Noss", "Helwa", "Gidan"])
+        
         if st.form_submit_button(TXT['save']):
             update_profile_db({"age": yas, "height": boy, "current_weight": kilo, "target_weight": hedef, "gender": cinsiyet, "activity_level": aktivite})
             st.rerun()
     st.stop()
 
-# 3. ANA UYGULAMA
+# 3. ANA UYGULAMA (Main Dashboard)
 logs = get_todays_logs()
 meals = [l['content'] for l in logs if l['type'] == 'meal']
 water_logs = [l['content'] for l in logs if l['type'] == 'water']
 
+# Hesaplamalar
 total_cal = sum(m.get('cal', 0) for m in meals)
 total_pro = sum(m.get('pro', 0) for m in meals)
 total_fat = sum(m.get('fat', 0) for m in meals)
 total_carb = sum(m.get('carb', 0) for m in meals)
 total_water = sum(w.get('ml', 0) for w in water_logs)
 
-bmr = (10 * float(prof['current_weight'])) + (6.25 * float(prof['height'])) - (5 * float(prof['age']))
-bmr += 5 if prof.get('gender') == 'Erkek' else -161
+bmr = (10 * float(prof.get('current_weight') or 70)) + (6.25 * float(prof.get('height') or 170)) - (5 * float(prof.get('age') or 25))
+bmr += 5 if prof.get('gender') in ['Erkek', 'Male', 'Ragel'] else -161
 target_cal = int(bmr * 1.375)
 remain_cal = target_cal - total_cal
-water_target = int(prof.get('water_target') or (float(prof['current_weight']) * 35))
+water_target = int(prof.get('water_target') or (float(prof.get('current_weight') or 70) * 35))
 
 # Header
 c1, c2 = st.columns([3, 1])
@@ -236,7 +256,6 @@ with tabs[0]:
     
     with st.expander(f"➕ {TXT['food_add']}", expanded=True):
         img = st.file_uploader(" ", type=["jpg","png","webp"], label_visibility="collapsed")
-        # Öğün Seçimi
         meal_options = [TXT['m_breakfast'], TXT['m_lunch'], TXT['m_dinner'], TXT['m_snack']]
         selected_meal = st.selectbox(TXT['meal_select'], meal_options)
         
@@ -244,21 +263,19 @@ with tabs[0]:
             with st.spinner(TXT['ai_working']):
                 d = ai_analyze('JSON: {"name": "str", "cal": int, "pro": int, "fat": int, "carb": int}', Image.open(img), LANG)
                 if d.get('cal', 0) > 0:
-                    d['category'] = selected_meal # Kategoriyi ekle
+                    d['category'] = selected_meal
                     add_log_db('meal', d)
                     st.success("OK!")
                     time.sleep(1); st.rerun()
                 else: st.error("AI okuyamadı.")
 
     st.markdown("---")
-    # YEMEKLERİ GRUPLA
     meal_groups = {TXT['m_breakfast']: [], TXT['m_lunch']: [], TXT['m_dinner']: [], TXT['m_snack']: []}
     for m in meals:
-        cat = m.get('category', TXT['m_snack']) # Eğer eski veri varsa varsayılan snack
+        cat = m.get('category', TXT['m_snack'])
         if cat in meal_groups: meal_groups[cat].append(m)
-        else: meal_groups[TXT['m_snack']].append(m) # Eşleşmezse snack'e at
+        else: meal_groups[TXT['m_snack']].append(m)
 
-    # GRUPLARI YAZDIR
     for category_name, items in meal_groups.items():
         if items:
             st.markdown(f"<div class='meal-header'>{category_name}</div>", unsafe_allow_html=True)
@@ -277,7 +294,7 @@ with tabs[1]:
     st.markdown("---")
     with st.expander(TXT['manual_water']):
         man_ml = st.number_input("ml", 0, 2000, 200)
-        if st.button("Ekle", key="w_man"): add_log_db('water', {'ml': man_ml}); st.rerun()
+        if st.button(T[LANG].get('save', 'Save')): add_log_db('water', {'ml': man_ml}); st.rerun()
 
 # TAB 3: KİLO
 with tabs[2]:
