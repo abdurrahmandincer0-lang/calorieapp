@@ -8,7 +8,7 @@ import time
 import pandas as pd
 
 # --- 1. KONFİGÜRASYON ---
-    API_KEY = st.secrets["GOOGLE_API_KEY"]
+API_KEY = st.secrets["GOOGLE_API_KEY"]
 
 
 genai.configure(api_key=API_KEY)
@@ -431,3 +431,4 @@ with tab_profil:
             time.sleep(1); st.rerun()
         st.divider()
         if st.button(TXT['reset'], type="secondary"): os.remove(DOSYA_ADI); st.rerun()
+
