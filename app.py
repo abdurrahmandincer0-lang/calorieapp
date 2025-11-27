@@ -8,6 +8,7 @@ import time
 import pandas as pd
 
 # --- 1. KONFİGÜRASYON ---
+
 API_KEY = st.secrets["GOOGLE_API_KEY"]
 
 
@@ -117,7 +118,7 @@ if user_data["su_takibi"]["tarih"] != bugun:
     veri_kaydet(user_data)
 if 'su_ml' not in st.session_state: st.session_state['su_ml'] = user_data["su_takibi"]["ml"]
 
-# --- 5. CSS TASARIMI ---
+# --- 5. CSS TASARIMI (GÜNCELLENDİ) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;800&display=swap');
@@ -128,28 +129,32 @@ st.markdown("""
     .block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; }
     header {visibility: hidden;}
     
+    /* Kart Tasarımı - Daha sıkı padding */
     div[data-testid="stVerticalBlockBorderWrapper"] {
         background-color: #1A1D26; border: 1px solid #2D3342;
-        border-radius: 16px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        border-radius: 20px; padding: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
     
+    /* Inputlar */
     .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div {
         background-color: #0F1116 !important; color: white !important;
         border: 1px solid #2D3342 !important; border-radius: 10px !important;
     }
     
+    /* Tab Tasarımı */
     button[data-baseweb="tab"] {
         font-size: 14px !important;
         font-weight: 600;
-        flex: 1; 
-        padding: 0px !important;
+        flex: 1; padding: 0px !important;
     }
     
+    /* Butonlar */
     div.stButton > button {
         background: linear-gradient(90deg, #7C3AED 0%, #5B21B6 100%);
         color: white; border: none; border-radius: 12px; padding: 10px; font-weight: 600; width: 100%;
     }
 
+    /* Kutlama */
     .kutlama-overlay {
         position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
         background-color: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 999999;
@@ -311,24 +316,46 @@ tab_menu, tab_su, tab_kilo, tab_profil = st.tabs([
     f"⚙️ {TXT['settings']}"
 ])
 
-# --- TAB 1: YEMEK ---
+# --- TAB 1: YEMEK (TASARIM DÜZELTİLDİ) ---
 with tab_menu:
-    st.markdown('<div class="modern-card">', unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([1, 1.5, 1])
-    with c1: st.markdown(f"<p style='text-align:center; margin:0;'>{TXT['dash_intake']}</p><h2 style='text-align:center; color:white;'>{st.session_state['toplam_kalori']}</h2>", unsafe_allow_html=True)
-    with c2:
-        renk = "#10B981" if kalan > 0 else "#EF4444"
-        st.markdown(f"<h1 style='text-align:center; margin:0; font-size:3.5rem; color:{renk};'>{kalan}</h1><p style='text-align:center;'>{TXT['dash_remain']}</p>", unsafe_allow_html=True)
-    with c3: st.markdown(f"<p style='text-align:center; margin:0;'>{TXT['dash_target']}</p><h2 style='text-align:center; color:white;'>{HEDEF}</h2>", unsafe_allow_html=True)
+    # KART BAŞLANGICI (Daha temiz HTML yapısı)
+    renk = "#10B981" if kalan > 0 else "#EF4444"
+    st.markdown(f"""
+    <div style="background-color: #1A1D26; border-radius: 20px; padding: 20px; border: 1px solid #2D3342; text-align: center;">
+        <p style="color: #A0A0A0; font-size: 14px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;">{TXT['dash_remain']}</p>
+        <h1 style="color: {renk}; font-size: 48px; margin: 0; line-height: 1; font-weight: 800;">{kalan}</h1>
+        <hr style="border-color: #2D3342; margin: 20px 0; opacity: 0.5;">
+        <div style="display: flex; justify-content: space-between; padding: 0 10px;">
+            <div style="text-align: left;">
+                <p style="color: #A0A0A0; font-size: 12px; margin: 0;">{TXT['dash_intake']}</p>
+                <h3 style="color: white; margin: 0; font-size: 24px;">{st.session_state['toplam_kalori']}</h3>
+            </div>
+            <div style="text-align: right;">
+                <p style="color: #A0A0A0; font-size: 12px; margin: 0;">{TXT['dash_target']}</p>
+                <h3 style="color: white; margin: 0; font-size: 24px;">{HEDEF}</h3>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
     
     st.write("")
+    
+    # Makro Barlar (Daha ince ve şık)
     h_p, h_y, h_k = int(profil["kilo"]*1.8), int((HEDEF*0.3)/9), int((HEDEF-(profil["kilo"]*1.8*4 + HEDEF*0.3))/4)
     m1, m2, m3 = st.columns(3)
-    with m1: st.progress(min(st.session_state['makrolar']['protein']/h_p, 1.0)); st.caption(f"Pro: {st.session_state['makrolar']['protein']}g")
-    with m2: st.progress(min(st.session_state['makrolar']['yag']/h_y, 1.0)); st.caption(f"Fat: {st.session_state['makrolar']['yag']}g")
-    with m3: st.progress(min(st.session_state['makrolar']['karb']/h_k, 1.0)); st.caption(f"Carb: {st.session_state['makrolar']['karb']}g")
-    st.markdown('</div>', unsafe_allow_html=True)
+    
+    with m1: 
+        st.caption(f"Protein: {st.session_state['makrolar']['protein']}/{h_p}g")
+        st.progress(min(st.session_state['makrolar']['protein']/h_p, 1.0))
+    with m2: 
+        st.caption(f"Yağ: {st.session_state['makrolar']['yag']}/{h_y}g")
+        st.progress(min(st.session_state['makrolar']['yag']/h_y, 1.0))
+    with m3: 
+        st.caption(f"Karb: {st.session_state['makrolar']['karb']}/{h_k}g")
+        st.progress(min(st.session_state['makrolar']['karb']/h_k, 1.0))
 
+    # Yemek Ekleme
+    st.write("")
     with st.expander(f"➕ {TXT['food_add']}", expanded=True):
         t1, t2 = st.tabs([TXT['photo_tab'], TXT['text_tab']])
         oguns = [TXT['meal_breakfast'], TXT['meal_lunch'], TXT['meal_dinner'], TXT['meal_snack']]
@@ -351,6 +378,7 @@ with tab_menu:
                     d = ai_analiz(f'Food: {txt}. JSON: {{"yemek_adi": "str", "kalori": int, "protein": int, "yag": int, "karbonhidrat": int}}')
                     yemek_ekle_func(real_ogun2, d); st.rerun()
 
+    # Menü Listesi
     st.subheader(TXT['menu_title'])
     for o_key, o_label in zip(ogun_keys, oguns):
         l = st.session_state['gunluk_kayit'][o_key]
@@ -371,7 +399,7 @@ with tab_menu:
                     st.info(res.text)
                 except: st.error("Error")
 
-# --- TAB 2: SU (Geliştirilmiş) ---
+# --- TAB 2: SU ---
 with tab_su:
     st.subheader(TXT['water_title'])
     with st.container(border=True):
@@ -383,36 +411,31 @@ with tab_su:
         st.progress(min(icerilen/hedef_su, 1.0))
         st.write("")
         
-        # Butonlar yan yana
         b1, b2, b3 = st.columns(3)
         with b1: 
             if st.button(TXT['water_cup']): su_guncelle(200); st.rerun()
         with b2: 
             if st.button(TXT['water_bottle']): su_guncelle(500); st.rerun()
         with b3: 
-            # Sil butonu (Mesajı güncelledik)
             if st.button(TXT['water_remove']): su_guncelle(-200); st.rerun()
 
         st.divider()
-        # MANUEL GİRİŞ (GERİ GELDİ)
         with st.expander(TXT['manual_add']):
             m_val = st.number_input("ml", 0, 2000, 200, label_visibility="collapsed")
             if st.button(TXT['add_btn'], key="man_su"): su_guncelle(m_val); st.rerun()
 
-# --- TAB 3: KİLO (Yeni Sekme) ---
+# --- TAB 3: KİLO ---
 with tab_kilo:
     st.subheader(TXT['weight_title'])
     with st.container(border=True):
         kg = st.number_input(TXT['weight'], value=float(profil["kilo"]), step=0.1)
         if st.button(TXT['save']): kilo_ekle(kg); st.rerun()
-        
         st.write("")
         if user_data["kilo_gecmisi"]:
             df = pd.DataFrame(user_data["kilo_gecmisi"])
             df["tarih"] = pd.to_datetime(df["tarih"])
             st.line_chart(df.set_index("tarih"), height=250, color="#7C3AED")
-        else:
-            st.info("Henüz veri yok.")
+        else: st.info("Henüz veri yok.")
 
 # --- TAB 4: AYARLAR ---
 with tab_profil:
@@ -431,4 +454,3 @@ with tab_profil:
             time.sleep(1); st.rerun()
         st.divider()
         if st.button(TXT['reset'], type="secondary"): os.remove(DOSYA_ADI); st.rerun()
-
