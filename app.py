@@ -1,456 +1,334 @@
 import streamlit as st
 import google.generativeai as genai
+from supabase import create_client, Client
 from PIL import Image
 import json
-import os
-from datetime import date, timedelta
 import time
+from datetime import date, datetime, timedelta
 import pandas as pd
 
-# --- 1. KONFİGÜRASYON ---
+# --- 1. KONFİGÜRASYON VE BAĞLANTILAR ---
+st.set_page_config(page_title="Caloria Cloud", page_icon="🥑", layout="centered")
 
-API_KEY = st.secrets["GOOGLE_API_KEY"]
+# API Anahtarlarını Alalım (secrets.toml dosyasından)
+try:
+    GENAI_KEY = st.secrets["GOOGLE_API_KEY"]
+    SUPA_URL = st.secrets["SUPABASE_URL"]
+    SUPA_KEY = st.secrets["SUPABASE_KEY"]
+except:
+    st.error("🚨 HATA: .streamlit/secrets.toml dosyası bulunamadı veya eksik.")
+    st.info("Lütfen proje klasörüne .streamlit klasörü açıp içine secrets.toml dosyasını ekleyin.")
+    st.stop()
 
+# Bağlantıları Kur
+genai.configure(api_key=GENAI_KEY)
 
-genai.configure(api_key=API_KEY)
+@st.cache_resource
+def init_supabase():
+    return create_client(SUPA_URL, SUPA_KEY)
 
-st.set_page_config(page_title="Caloria", page_icon="🥑", layout="centered")
+supabase = init_supabase()
 
 # --- 2. DİL SÖZLÜĞÜ ---
 T = {
     "TR": {
-        "welcome": "Hoş geldin", "streak": "Gün", "onboard_title": "👋 Merhaba!",
-        "onboard_desc": "Caloria'ya hoş geldin. Seni tanıyalım.", "name_ask": "Sana nasıl hitap edelim?",
-        "gender": "Cinsiyet", "male": "Erkek", "female": "Kadın",
-        "age": "Yaşın", "height": "Boy (cm)", "weight": "Mevcut Kilo (kg)",
-        "activity": "Günlük Aktivite", "target_weight": "🎯 Hedef Kilo (kg)", "start_btn": "Başla 🚀",
-        "missing_info": "⚠️ Lütfen tüm alanları doldur.", "dash_intake": "Alınan", "dash_remain": "KALAN", "dash_target": "Hedef",
-        "food_add": "Yemek Ekle", "photo_tab": "📸 Fotoğraf", "text_tab": "✍️ Yazı",
-        "analyze_btn": "Analiz Et", "ai_working": "AI Çalışıyor...", "add_btn": "Ekle", "what_eat": "Ne yedin?",
-        "menu_title": "Menü", "coach_btn": "🧠 AI Koç",
-        "coach_prompt": "Sen Türkçe konuşan samimi bir diyetisyensin.",
-        "water_title": "Su Takibi", "water_cup": "+200 ml", "water_bottle": "+500 ml", "water_remove": "Sil (-200)",
-        "manual_add": "Manuel Ekle (ml)", "weight_title": "Kilo Takibi", "save": "Kaydet", "settings": "Ayarlar",
-        "update": "Güncelle", "reset": "Sıfırla", "lang_select": "Dil / Language",
-        "act_sedentary": "Hareketsiz", "act_light": "Az Hareketli", "act_mod": "Orta Hareketli", "act_active": "Çok Hareketli",
-        "congrats": "HARİKASIN!", "closing": "saniye içinde kapanıyor...",
-        "meal_breakfast": "Kahvaltı", "meal_lunch": "Öğle", "meal_dinner": "Akşam", "meal_snack": "Ara Öğün"
+        "login_title": "Giriş Yap", "signup_title": "Kayıt Ol", "email": "E-posta", "pass": "Şifre",
+        "login_btn": "Giriş", "signup_btn": "Hesap Oluştur", "logout": "Çıkış Yap",
+        "welcome": "Hoş geldin", "streak": "Gün", "dash_remain": "KALAN", "dash_intake": "Alınan", "dash_target": "Hedef",
+        "menu": "Menü", "water": "Su", "weight": "Kilo", "settings": "Ayarlar",
+        "food_add": "Yemek Ekle", "analyze": "Analiz Et", "ai_working": "AI İnceliyor...",
+        "add_water": "Ekle", "save": "Kaydet", "update": "Güncelle", "dark_mode": "Tema Otomatiktir",
+        "error_login": "Hatalı e-posta veya şifre.", "success_signup": "Kayıt başarılı! Giriş yapabilirsin.",
+        "coach_btn": "AI Koç", "coach_prompt": "Sen Türkçe konuşan bir diyetisyensin.",
+        "loading": "Veriler yükleniyor..."
     },
-    "EN": {
-        "welcome": "Welcome", "streak": "Day", "onboard_title": "👋 Hello!",
-        "onboard_desc": "Welcome to Caloria. Let's get to know you.", "name_ask": "What should we call you?",
-        "gender": "Gender", "male": "Male", "female": "Female",
-        "age": "Age", "height": "Height (cm)", "weight": "Current Weight (kg)",
-        "activity": "Daily Activity", "target_weight": "🎯 Target Weight (kg)", "start_btn": "Get Started 🚀",
-        "missing_info": "⚠️ Please fill in all fields.", "dash_intake": "Intake", "dash_remain": "REMAINING", "dash_target": "Target",
-        "food_add": "Add Food", "photo_tab": "📸 Photo", "text_tab": "✍️ Text",
-        "analyze_btn": "Analyze", "ai_working": "AI Processing...", "add_btn": "Add", "what_eat": "What did you eat?",
-        "menu_title": "Menu", "coach_btn": "🧠 AI Coach",
-        "coach_prompt": "You are a professional dietitian. Respond in English.",
-        "water_title": "Water", "water_cup": "+200 ml", "water_bottle": "+500 ml", "water_remove": "Remove (-200)",
-        "manual_add": "Manual Add (ml)", "weight_title": "Weight", "save": "Save", "settings": "Settings",
-        "update": "Update", "reset": "Reset", "lang_select": "Language",
-        "act_sedentary": "Sedentary", "act_light": "Lightly Active", "act_mod": "Moderately Active", "act_active": "Very Active",
-        "congrats": "AWESOME!", "closing": "closing in seconds...",
-        "meal_breakfast": "Breakfast", "meal_lunch": "Lunch", "meal_dinner": "Dinner", "meal_snack": "Snack"
-    },
-    "AR": { 
-        "welcome": "Ahlan bik", "streak": "yōm", "onboard_title": "👋 Ahlan!",
-        "onboard_desc": "Ahlan bik fi Caloria. Khallina netaraf 3alek.", "name_ask": "Esmak eh?",
-        "gender": "El No3", "male": "Ragel", "female": "Set",
-        "age": "El Senn", "height": "El Tool (cm)", "weight": "El Wazn (kg)",
-        "activity": "Haraktak eh?", "target_weight": "🎯 Hadafak kam (kg)?", "start_btn": "Yalla Bina 🚀",
-        "missing_info": "⚠️ Men fadlak, emla kol el khanat.", "dash_intake": "Elly akalto", "dash_remain": "BA2Y", "dash_target": "Hadaf",
-        "food_add": "Dakhal Akl", "photo_tab": "📸 Sowar", "text_tab": "✍️ Ketaba",
-        "analyze_btn": "Hallel", "ai_working": "AI Beyfakar...", "add_btn": "Def", "what_eat": "Akalt eh?",
-        "menu_title": "El Menu", "coach_btn": "🧠 El Coach",
-        "coach_prompt": "Enta doctor diet masri shater. Rod bel lahga el masreya (Egyptian Arabic).",
-        "water_title": "Mayya", "water_cup": "+200 ml", "water_bottle": "+500 ml", "water_remove": "Shil (-200)",
-        "manual_add": "Edafa Yadawi (ml)", "weight_title": "El Wazn", "save": "Hafez", "settings": "E3dadat",
-        "update": "Gaded", "reset": "Ekhrog", "lang_select": "El Logha / Language",
-        "act_sedentary": "Antakh (Hareketsiz)", "act_light": "Noss Noss", "act_mod": "Haraka Helwa", "act_active": "Riyadi Gidan",
-        "congrats": "YA GAMED!", "closing": "sawany...",
-        "meal_breakfast": "Fetar", "meal_lunch": "Ghada", "meal_dinner": "3asha", "meal_snack": "Tasbira"
-    }
+    "EN": { "login_title": "Login", "signup_title": "Sign Up", "email": "Email", "pass": "Password", "login_btn": "Login", "signup_btn": "Sign Up", "logout": "Logout", "welcome": "Welcome", "streak": "Day", "dash_remain": "REMAINING", "dash_intake": "Intake", "dash_target": "Target", "menu": "Menu", "water": "Water", "weight": "Weight", "settings": "Settings", "food_add": "Add Food", "analyze": "Analyze", "ai_working": "Processing...", "add_water": "Add", "save": "Save", "update": "Update", "dark_mode": "Auto Theme", "error_login": "Invalid credentials.", "success_signup": "Signed up! Please login.", "coach_btn": "AI Coach", "coach_prompt": "You are a dietitian.", "loading": "Loading data..." },
+    "AR": { "login_title": "Dokhoul", "signup_title": "Tasgil", "email": "Email", "pass": "Password", "login_btn": "Dokhoul", "signup_btn": "Tasgil", "logout": "Khorouj", "welcome": "Ahlan", "streak": "Yom", "dash_remain": "BA2Y", "dash_intake": "Akalt", "dash_target": "Hadaf", "menu": "Menu", "water": "Mayya", "weight": "Wazn", "settings": "E3dadat", "food_add": "Dakhal Akl", "analyze": "Hallel", "ai_working": "Lahza...", "add_water": "Def", "save": "Hafez", "update": "Gaded", "dark_mode": "Auto Theme", "error_login": "Ghalat", "success_signup": "Tamam!", "coach_btn": "Coach", "coach_prompt": "Enta doctor.", "loading": "Tahmil..." }
 }
 
-# --- 3. VERİ YÖNETİMİ ---
-DOSYA_ADI = "kullanici_verisi.json"
-
-def veri_yukle():
-    default_data = {
-        "setup_tamamlandi": False,
-        "profil": { 
-            "isim": "Kullanıcı", "dil": "TR", 
-            "cinsiyet": None, "yas": None, "boy": None, "kilo": None,
-            "aktivite": None, "hedef_kilo": None
-        },
-        "streak": 0, "son_yemek_tarihi": "", "kilo_gecmisi": [],
-        "su_takibi": {"tarih": "", "ml": 0}, "manuel_su_hedefi": None
-    }
-    if not os.path.exists(DOSYA_ADI): return default_data
-    try:
-        with open(DOSYA_ADI, "r") as f:
-            data = json.load(f)
-            for key in default_data:
-                if key not in data: data[key] = default_data[key]
-            if "dil" not in data["profil"]: data["profil"]["dil"] = "TR"
-            return data
-    except: return default_data
-
-def veri_kaydet(data):
-    with open(DOSYA_ADI, "w") as f: json.dump(data, f)
-
-user_data = veri_yukle()
-LANG = user_data["profil"]["dil"] 
-TXT = T[LANG]
-
-# --- 4. SESSION STATE ---
-if 'gunluk_kayit' not in st.session_state: st.session_state['gunluk_kayit'] = {"Kahvaltı": [], "Öğle Yemeği": [], "Akşam Yemeği": [], "Ara Öğün": []}
-if 'toplam_kalori' not in st.session_state: st.session_state['toplam_kalori'] = 0
-if 'makrolar' not in st.session_state: st.session_state['makrolar'] = {"protein": 0, "yag": 0, "karb": 0}
-if 'kutlama_goster' not in st.session_state: st.session_state['kutlama_goster'] = False
-if 'yeni_streak_sayisi' not in st.session_state: st.session_state['yeni_streak_sayisi'] = 0
-
-bugun = date.today().strftime("%Y-%m-%d")
-if user_data["su_takibi"]["tarih"] != bugun:
-    user_data["su_takibi"] = {"tarih": bugun, "ml": 0}
-    veri_kaydet(user_data)
-if 'su_ml' not in st.session_state: st.session_state['su_ml'] = user_data["su_takibi"]["ml"]
-
-# --- 5. CSS TASARIMI (GÜNCELLENDİ) ---
+# --- 3. CSS TASARIMI (Temiz & Otomatik Tema) ---
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;800&display=swap');
     html, body, [class*="css"] { font-family: 'Poppins', sans-serif; }
+    .block-container { padding-top: 2rem !important; padding-bottom: 5rem !important; }
+    header, footer { visibility: hidden; }
     
-    .stApp { background-color: #0F1116; }
-    
-    .block-container { padding-top: 1rem !important; padding-bottom: 5rem !important; }
-    header {visibility: hidden;}
-    
-    /* Kart Tasarımı - Daha sıkı padding */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #1A1D26; border: 1px solid #2D3342;
-        border-radius: 20px; padding: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    
-    /* Inputlar */
-    .stTextInput input, .stNumberInput input, .stSelectbox div[data-baseweb="select"] > div {
-        background-color: #0F1116 !important; color: white !important;
-        border: 1px solid #2D3342 !important; border-radius: 10px !important;
-    }
-    
-    /* Tab Tasarımı */
-    button[data-baseweb="tab"] {
-        font-size: 14px !important;
-        font-weight: 600;
-        flex: 1; padding: 0px !important;
-    }
+    /* Tab Düzeni */
+    button[data-baseweb="tab"] { flex: 1; font-weight: 600; padding: 0px !important; }
     
     /* Butonlar */
-    div.stButton > button {
-        background: linear-gradient(90deg, #7C3AED 0%, #5B21B6 100%);
-        color: white; border: none; border-radius: 12px; padding: 10px; font-weight: 600; width: 100%;
-    }
-
+    div.stButton > button { background: linear-gradient(90deg, #7C3AED 0%, #5B21B6 100%) !important; color: white !important; border: none; border-radius: 12px; padding: 10px; }
+    
     /* Kutlama */
-    .kutlama-overlay {
-        position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-        background-color: rgba(0,0,0,0.85); backdrop-filter: blur(8px); z-index: 999999;
-        display: flex; justify-content: center; align-items: center; flex-direction: column;
-    }
-    .k-baslik { font-size: 40px; font-weight: 900; color: white !important; margin: 0; }
-    .k-sayi { font-size: 80px; font-weight: 900; color: #FFD700 !important; margin: 10px 0; }
+    .kutlama-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0,0,0,0.85); z-index: 9999; display: flex; justify-content: center; align-items: center; flex-direction: column; }
+    
+    /* Dashboard Renkleri */
+    .yesil-yazi { color: #10B981 !important; }
+    .kirmizi-yazi { color: #EF4444 !important; }
     </style>
 """, unsafe_allow_html=True)
 
-# =========================================================
-#  ONBOARDING
-# =========================================================
-if not user_data["setup_tamamlandi"]:
-    col_lang, _ = st.columns([1, 3])
-    with col_lang:
-        dil_secimi = st.selectbox("Language / Dil / اللغة", ["TR", "EN", "AR"])
-        TXT_ONB = T[dil_secimi]
+# --- 4. OTURUM YÖNETİMİ (AUTH) ---
+if 'user' not in st.session_state: st.session_state['user'] = None
+if 'profile' not in st.session_state: st.session_state['profile'] = None
 
-    st.markdown("<br>", unsafe_allow_html=True)
-    st.markdown("<h1 style='text-align: center; font-size: 3rem;'>⚡ Caloria</h1>", unsafe_allow_html=True)
-    st.markdown(f"<p style='text-align: center; font-size: 1.1rem; color:#A0A0A0;'>{TXT_ONB['onboard_desc']}</p>", unsafe_allow_html=True)
-    
-    with st.container(border=True):
-        st.markdown(f"### {TXT_ONB['onboard_title']}")
-        c_isim = st.text_input(TXT_ONB['name_ask'])
-        c_cinsiyet = st.radio("gizli", [TXT_ONB['male'], TXT_ONB['female']], horizontal=True, label_visibility="collapsed")
-        
-        c1, c2 = st.columns(2)
-        with c1: c_yas = st.number_input(TXT_ONB['age'], 10, 100, value=None)
-        with c2: c_boy = st.number_input(TXT_ONB['height'], 100, 250, value=None)
-        c_kilo = st.number_input(TXT_ONB['weight'], 30.0, 200.0, value=None)
-        c_aktivite = st.selectbox(TXT_ONB['activity'], [TXT_ONB['act_sedentary'], TXT_ONB['act_light'], TXT_ONB['act_mod'], TXT_ONB['act_active']], index=None)
-        c_hedef_kilo = st.number_input(TXT_ONB['target_weight'], 30.0, 200.0, value=None)
-        
-        if st.button(TXT_ONB['start_btn']):
-            if not c_isim or c_cinsiyet is None or c_yas is None or c_boy is None or c_kilo is None or c_aktivite is None or c_hedef_kilo is None:
-                st.warning(TXT_ONB['missing_info'])
-            else:
-                user_data["profil"] = {
-                    "isim": c_isim, "cinsiyet": c_cinsiyet, "yas": c_yas, 
-                    "boy": c_boy, "kilo": c_kilo, "aktivite": c_aktivite, 
-                    "hedef_kilo": c_hedef_kilo, "dil": dil_secimi 
-                }
-                user_data["kilo_gecmisi"] = [{"tarih": bugun, "kilo": c_kilo}]
-                user_data["setup_tamamlandi"] = True
-                veri_kaydet(user_data)
-                st.rerun()
-    st.stop()
-
-# =========================================================
-#  FONKSİYONLAR
-# =========================================================
-def streak_guncelle():
-    d = veri_yukle(); s = d["streak"]; son = d["son_yemek_tarihi"]
-    dun = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
-    yeni = False
-    if son != bugun:
-        if son == dun: s += 1
-        else: s = 1
-        d["streak"] = s; d["son_yemek_tarihi"] = bugun; veri_kaydet(d); yeni = True
-    if yeni:
-        st.session_state['kutlama_goster'] = True
-        st.session_state['yeni_streak_sayisi'] = s
-
-def kilo_ekle(k):
-    d = veri_yukle(); g = d["kilo_gecmisi"]
-    found = False
-    for x in g:
-        if x["tarih"] == bugun: x["kilo"] = k; found = True; break
-    if not found: g.append({"tarih": bugun, "kilo": k})
-    d["kilo_gecmisi"] = g; d["profil"]["kilo"] = k
-    veri_kaydet(d)
-    st.toast("OK!", icon="✅")
-
-def hesapla_hedef(p):
-    if not p["yas"]: return 2000
-    bmr = (10*p["kilo"]) + (6.25*p["boy"]) - (5*p["yas"])
-    erkek_listesi = ["Erkek", "Male", "Ragel"]
-    if p["cinsiyet"] in erkek_listesi: bmr += 5
-    else: bmr -= 161
-    tdee = bmr * 1.375 
-    if p["hedef_kilo"] < p["kilo"]: return int(tdee - 500)
-    elif p["hedef_kilo"] > p["kilo"]: return int(tdee + 500)
-    return int(tdee)
-
-def ai_analiz(prompt, img=None):
+def login(email, password):
     try:
-        model = genai.GenerativeModel('gemini-2.0-flash')
-        lang_prompt = f"Answer in {LANG}. " if LANG != "AR" else "Answer in Egyptian Arabic context, but KEEP NUMBERS AS STANDARD ENGLISH DIGITS (0-9). "
-        full_prompt = lang_prompt + prompt + """
-        IMPORTANT: 
-        - Return ONLY JSON.
-        - Use integer numbers for calories and macros (e.g., 200, not '٢٠٠').
-        - Do not include any explanations.
-        """
-        inp = [full_prompt, img] if img else [full_prompt]
-        res = model.generate_content(inp)
-        text = res.text
-        if "```json" in text: text = text.replace("```json", "").replace("```", "")
-        elif "```" in text: text = text.replace("```", "")
-        start = text.find('{'); end = text.rfind('}') + 1
-        if start != -1 and end != 0: 
-            json_data = json.loads(text[start:end])
-            if 'kalori' in json_data:
-                try: json_data['kalori'] = int(str(json_data['kalori']).replace("kcal", "").strip())
-                except: json_data['kalori'] = 0
-            return json_data
-        else: raise ValueError("JSON yok")
+        response = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        st.session_state['user'] = response.user
+        fetch_profile()
+        st.rerun()
     except Exception as e:
-        return {"yemek_adi": "Error / Hata", "kalori": 0, "protein": 0, "yag": 0, "karbonhidrat": 0}
+        st.error(f"Giriş hatası: {e}")
 
-def yemek_ekle_func(ogun, data):
-    if int(data.get('kalori') or 0) == 0:
-        st.error("Hata: Kalori okunamadı.")
-        return
-    st.session_state['gunluk_kayit'][ogun].append(data)
-    st.session_state['toplam_kalori'] += int(data.get('kalori') or 0)
-    st.session_state['makrolar']['protein'] += int(data.get('protein') or 0)
-    st.session_state['makrolar']['yag'] += int(data.get('yag') or 0)
-    st.session_state['makrolar']['karb'] += int(data.get('karbonhidrat') or 0)
-    streak_guncelle()
+def signup(email, password, name):
+    try:
+        response = supabase.auth.sign_up({"email": email, "password": password})
+        if response.user:
+            # Profil ismini güncelle
+            time.sleep(2) 
+            supabase.table("profiles").update({"full_name": name}).eq("id", response.user.id).execute()
+            st.success("Kayıt başarılı! Şimdi Giriş Yap sekmesinden giriş yapabilirsin.")
+    except Exception as e:
+        st.error(f"Kayıt hatası: {e}")
 
-def su_guncelle(miktar):
-    st.session_state['su_ml'] += miktar
-    if st.session_state['su_ml'] < 0: st.session_state['su_ml'] = 0
-    data = veri_yukle()
-    data["su_takibi"] = {"tarih": date.today().strftime("%Y-%m-%d"), "ml": st.session_state['su_ml']}
-    veri_kaydet(data)
-
-# --- Hesaplamalar ---
-profil = user_data["profil"]
-HEDEF = hesapla_hedef(profil)
-kalan = HEDEF - st.session_state['toplam_kalori']
-mevcut_streak = user_data["streak"]
-kullanici_adi = profil.get("isim", "User")
-
-# --- KUTLAMA ---
-if st.session_state['kutlama_goster']:
-    kp = st.empty()
-    for i in range(3, 0, -1):
-        y = int((i/3)*100)
-        kp.markdown(f"""<div class="kutlama-overlay"><div class="k-baslik">{TXT['congrats']} 🎉</div><div class="k-sayi">🔥 {st.session_state['yeni_streak_sayisi']} {TXT['streak']}</div></div>""", unsafe_allow_html=True)
-        if i==3: st.balloons()
-        time.sleep(1)
-    st.session_state['kutlama_goster'] = False
+def logout():
+    supabase.auth.sign_out()
+    st.session_state['user'] = None
+    st.session_state['profile'] = None
     st.rerun()
 
-# --- HEADER ---
-st.markdown(f"<div style='display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;'><div><h3 style='margin:0; color:#E0E0E0;'>{TXT['welcome']}, <span style='color:#7C3AED;'>{kullanici_adi}</span></h3></div><div style='background:#1A1D26; padding:5px 10px; border-radius:10px; border:1px solid #2D3342;'>🔥 {mevcut_streak}</div></div>", unsafe_allow_html=True)
+# --- 5. VERİTABANI İŞLEMLERİ ---
+def fetch_profile():
+    if not st.session_state['user']: return
+    uid = st.session_state['user'].id
+    try:
+        data = supabase.table("profiles").select("*").eq("id", uid).execute()
+        if data.data:
+            st.session_state['profile'] = data.data[0]
+        else:
+            # Profil yoksa oluştur (Trigger çalışmazsa yedek plan)
+            supabase.table("profiles").insert({"id": uid, "email": st.session_state['user'].email}).execute()
+            st.session_state['profile'] = {"id": uid, "language": "TR"}
+    except Exception as e:
+        st.error(f"Profil çekme hatası: {e}")
+
+def get_todays_logs():
+    uid = st.session_state['user'].id
+    today = date.today().isoformat()
+    response = supabase.table("logs").select("*").eq("user_id", uid).eq("date", today).execute()
+    return response.data
+
+def add_log_db(type, content):
+    uid = st.session_state['user'].id
+    today = date.today().isoformat()
+    supabase.table("logs").insert({
+        "user_id": uid, "date": today, "type": type, "content": content
+    }).execute()
+    
+    # Streak Mantığı
+    prof = st.session_state['profile']
+    last_date = str(prof.get('last_log_date'))
+    streak = prof.get('streak') or 0
+    
+    # Bugün daha önce işlem yapılmadıysa
+    if last_date != today:
+        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        if last_date == yesterday:
+            new_streak = streak + 1
+        else:
+            new_streak = 1
+        
+        supabase.table("profiles").update({
+            "last_log_date": today, "streak": new_streak
+        }).eq("id", uid).execute()
+        
+        # UI Güncelle ve Kutlama Yap
+        st.session_state['profile']['streak'] = new_streak
+        st.session_state['show_celebration'] = True
+
+def update_profile_db(data):
+    uid = st.session_state['user'].id
+    supabase.table("profiles").update(data).eq("id", uid).execute()
+    fetch_profile() # Günceli çek
+
+# --- 6. HESAPLAMA & AI ---
+def calc_target(p):
+    w = float(p.get('current_weight') or 70)
+    h = float(p.get('height') or 170)
+    a = int(p.get('age') or 25)
+    g = p.get('gender')
+    target_w = float(p.get('target_weight') or 70)
+    
+    bmr = (10 * w) + (6.25 * h) - (5 * a)
+    bmr += 5 if g in ['Erkek', 'Male', 'Ragel'] else -161
+    tdee = bmr * 1.375
+    
+    if target_w < w: return int(tdee - 500)
+    elif target_w > w: return int(tdee + 500)
+    return int(tdee)
+
+def ai_analyze(prompt, img, lang):
+    try:
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        p = f"Answer in {lang}. {prompt}. RETURN ONLY JSON."
+        inp = [p, img] if img else [p]
+        res = model.generate_content(inp)
+        txt = res.text.replace("```json", "").replace("```", "")
+        return json.loads(txt[txt.find('{'):txt.rfind('}')+1])
+    except: return {"name": "Hata", "cal": 0, "pro": 0, "fat": 0, "carb": 0}
 
 # =========================================================
-#  ANA NAVİGASYON (4 SEKME)
+#  UYGULAMA AKIŞI
 # =========================================================
-tab_menu, tab_su, tab_kilo, tab_profil = st.tabs([
-    f"🍽️ {TXT['menu_title']}", 
-    f"💧 {TXT['water_title']}", 
-    f"⚖️ {TXT['weight_title']}", 
-    f"⚙️ {TXT['settings']}"
-])
 
-# --- TAB 1: YEMEK (TASARIM DÜZELTİLDİ) ---
-with tab_menu:
-    # KART BAŞLANGICI (Daha temiz HTML yapısı)
-    renk = "#10B981" if kalan > 0 else "#EF4444"
-    st.markdown(f"""
-    <div style="background-color: #1A1D26; border-radius: 20px; padding: 20px; border: 1px solid #2D3342; text-align: center;">
-        <p style="color: #A0A0A0; font-size: 14px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;">{TXT['dash_remain']}</p>
-        <h1 style="color: {renk}; font-size: 48px; margin: 0; line-height: 1; font-weight: 800;">{kalan}</h1>
-        <hr style="border-color: #2D3342; margin: 20px 0; opacity: 0.5;">
-        <div style="display: flex; justify-content: space-between; padding: 0 10px;">
-            <div style="text-align: left;">
-                <p style="color: #A0A0A0; font-size: 12px; margin: 0;">{TXT['dash_intake']}</p>
-                <h3 style="color: white; margin: 0; font-size: 24px;">{st.session_state['toplam_kalori']}</h3>
-            </div>
-            <div style="text-align: right;">
-                <p style="color: #A0A0A0; font-size: 12px; margin: 0;">{TXT['dash_target']}</p>
-                <h3 style="color: white; margin: 0; font-size: 24px;">{HEDEF}</h3>
+# A. GİRİŞ EKRANI (Login)
+if not st.session_state['user']:
+    st.markdown("<h1 style='text-align:center;'>⚡ Caloria Cloud</h1>", unsafe_allow_html=True)
+    st.info("Bulut tabanlı, çok oyunculu diyet uygulaması.")
+    
+    tab1, tab2 = st.tabs(["Giriş Yap", "Kayıt Ol"])
+    
+    with tab1:
+        email = st.text_input("E-posta", key="l_email")
+        password = st.text_input("Şifre", type="password", key="l_pass")
+        if st.button("Giriş Yap", type="primary"):
+            login(email, password)
+            
+    with tab2:
+        n_name = st.text_input("Ad Soyad", key="s_name")
+        n_email = st.text_input("E-posta", key="s_email")
+        n_pass = st.text_input("Şifre (Min 6 karakter)", type="password", key="s_pass")
+        if st.button("Hesap Oluştur"):
+            if len(n_pass) < 6:
+                st.warning("Şifre en az 6 karakter olmalı.")
+            elif n_email and n_name: 
+                signup(n_email, n_pass, n_name)
+            else: st.warning("Bilgileri doldurun.")
+    
+    st.stop()
+
+# B. ANA UYGULAMA (Logged In)
+if not st.session_state['profile']:
+    fetch_profile()
+
+prof = st.session_state['profile']
+LANG = prof.get('language', 'TR')
+TXT = T[LANG]
+
+# Verileri Çek
+logs = get_todays_logs()
+meals = [l['content'] for l in logs if l['type'] == 'meal']
+water_logs = [l['content'] for l in logs if l['type'] == 'water']
+
+total_cal = sum(m.get('cal', 0) for m in meals)
+total_pro = sum(m.get('pro', 0) for m in meals)
+total_fat = sum(m.get('fat', 0) for m in meals)
+total_carb = sum(m.get('carb', 0) for m in meals)
+total_water = sum(w.get('ml', 0) for w in water_logs)
+
+TARGET = calc_target(prof)
+REMAIN = TARGET - total_cal
+
+# Header
+col_h1, col_h2 = st.columns([3, 1])
+col_h1.markdown(f"<h3>{TXT['welcome']}, <span style='color:#7C3AED;'>{prof.get('full_name', 'User')}</span></h3>", unsafe_allow_html=True)
+col_h2.markdown(f"<div style='background:rgba(124,58,237,0.1); padding:5px; border-radius:10px; text-align:center; border:1px solid #7C3AED;'>🔥 {prof.get('streak', 0)} {TXT['streak']}</div>", unsafe_allow_html=True)
+
+# Kutlama
+if st.session_state.get('show_celebration'):
+    st.markdown(f"""<div class="kutlama-overlay"><h1 style='color:white;'>🎉 {TXT['streak']}!</h1></div>""", unsafe_allow_html=True)
+    st.balloons()
+    time.sleep(2)
+    st.session_state['show_celebration'] = False
+    st.rerun()
+
+# SEKMELER
+tabs = st.tabs([f"🍽️ {TXT['menu']}", f"💧 {TXT['water']}", f"⚖️ {TXT['weight']}", f"⚙️ {TXT['settings']}"])
+
+# 1. MENÜ SEKMESİ
+with tabs[0]:
+    # Dashboard Kartı
+    with st.container(border=True):
+        color_cls = "yesil-yazi" if REMAIN > 0 else "kirmizi-yazi"
+        st.markdown(f"""
+        <div style="text-align:center;">
+            <p style="font-size:12px; opacity:0.7; letter-spacing:1px;">{TXT['dash_remain']}</p>
+            <h1 class='{color_cls}' style="font-size:50px; margin:0;">{REMAIN}</h1>
+            <hr style="opacity:0.2;">
+            <div style="display:flex; justify-content:space-between;">
+                <div><small>{TXT['dash_intake']}</small><h3>{total_cal}</h3></div>
+                <div><small>{TXT['dash_target']}</small><h3>{TARGET}</h3></div>
             </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
     
     st.write("")
+    c1,c2,c3 = st.columns(3)
+    c1.progress(min(total_pro/150, 1.0)); c1.caption(f"Pro: {total_pro}g")
+    c2.progress(min(total_fat/70, 1.0)); c2.caption(f"Fat: {total_fat}g")
+    c3.progress(min(total_carb/250, 1.0)); c3.caption(f"Carb: {total_carb}g")
     
-    # Makro Barlar (Daha ince ve şık)
-    h_p, h_y, h_k = int(profil["kilo"]*1.8), int((HEDEF*0.3)/9), int((HEDEF-(profil["kilo"]*1.8*4 + HEDEF*0.3))/4)
-    m1, m2, m3 = st.columns(3)
-    
-    with m1: 
-        st.caption(f"Protein: {st.session_state['makrolar']['protein']}/{h_p}g")
-        st.progress(min(st.session_state['makrolar']['protein']/h_p, 1.0))
-    with m2: 
-        st.caption(f"Yağ: {st.session_state['makrolar']['yag']}/{h_y}g")
-        st.progress(min(st.session_state['makrolar']['yag']/h_y, 1.0))
-    with m3: 
-        st.caption(f"Karb: {st.session_state['makrolar']['karb']}/{h_k}g")
-        st.progress(min(st.session_state['makrolar']['karb']/h_k, 1.0))
-
-    # Yemek Ekleme
-    st.write("")
     with st.expander(f"➕ {TXT['food_add']}", expanded=True):
-        t1, t2 = st.tabs([TXT['photo_tab'], TXT['text_tab']])
-        oguns = [TXT['meal_breakfast'], TXT['meal_lunch'], TXT['meal_dinner'], TXT['meal_snack']]
-        ogun_keys = ["Kahvaltı", "Öğle Yemeği", "Akşam Yemeği", "Ara Öğün"]
+        img = st.file_uploader(" ", type=["jpg","png","webp"], label_visibility="collapsed")
+        if img and st.button(TXT['analyze']):
+            with st.spinner(TXT['ai_working']):
+                d = ai_analyze('JSON: {"name": "str", "cal": int, "pro": int, "fat": int, "carb": int}', Image.open(img), LANG)
+                if d.get('cal', 0) > 0:
+                    add_log_db('meal', d)
+                    st.success("OK!")
+                    time.sleep(1); st.rerun()
+                else: st.error("AI okuyamadı.")
+
+    st.markdown("### " + TXT['menu'])
+    for m in meals:
+        st.info(f"🍽️ {m.get('name')} — {m.get('cal')} kcal")
         
-        with t1:
-            img = st.file_uploader(" ", type=["jpg","png","webp"], label_visibility="collapsed")
-            ogun_idx = st.selectbox("Öğün Seç", oguns, key="o1")
-            real_ogun = ogun_keys[oguns.index(ogun_idx)]
-            if img and st.button(TXT['analyze_btn']):
-                with st.spinner(TXT['ai_working']):
-                    d = ai_analiz('JSON: {"yemek_adi": "str", "kalori": int, "protein": int, "yag": int, "karbonhidrat": int}', Image.open(img))
-                    yemek_ekle_func(real_ogun, d); st.rerun()
-        with t2:
-            txt = st.text_input(TXT['what_eat'])
-            ogun_idx2 = st.selectbox("Öğün Seç", oguns, key="o2")
-            real_ogun2 = ogun_keys[oguns.index(ogun_idx2)]
-            if st.button(TXT['add_btn']):
-                with st.spinner("..."):
-                    d = ai_analiz(f'Food: {txt}. JSON: {{"yemek_adi": "str", "kalori": int, "protein": int, "yag": int, "karbonhidrat": int}}')
-                    yemek_ekle_func(real_ogun2, d); st.rerun()
+    if total_cal > 0 and st.button(TXT['coach_btn']):
+        with st.spinner("..."):
+            res = genai.GenerativeModel('gemini-2.0-flash').generate_content(f"{TXT['coach_prompt']} {meals}")
+            st.info(res.text)
 
-    # Menü Listesi
-    st.subheader(TXT['menu_title'])
-    for o_key, o_label in zip(ogun_keys, oguns):
-        l = st.session_state['gunluk_kayit'][o_key]
-        if l:
-            toplam_kal = sum(int(x.get('kalori') or 0) for x in l)
-            st.markdown(f"**{o_label}** <span style='color:gray; font-size:12px'>{toplam_kal} kcal</span>", unsafe_allow_html=True)
-            for x in l:
-                ad = x.get('yemek_adi', 'Bilinmeyen Yemek')
-                kal = int(x.get('kalori') or 0)
-                st.info(f"🍽️ {ad} — {kal} kcal")
+# 2. SU SEKMESİ
+with tabs[1]:
+    target_water = int(float(prof.get('current_weight') or 70) * 35)
+    st.markdown(f"<h1 style='text-align:center; color:#3B82F6;'>{total_water} ml</h1>", unsafe_allow_html=True)
+    st.progress(min(total_water/target_water, 1.0))
+    
+    c1, c2, c3 = st.columns(3)
+    if c1.button("+200ml"): add_log_db('water', {'ml': 200}); st.rerun()
+    if c2.button("+500ml"): add_log_db('water', {'ml': 500}); st.rerun()
+    if c3.button("-200ml"): add_log_db('water', {'ml': -200}); st.rerun()
 
-    if st.session_state['toplam_kalori'] > 0:
-        if st.button(TXT['coach_btn']):
-            with st.spinner("..."):
-                try:
-                    p = TXT['coach_prompt'] + f" Target: {HEDEF}. Eaten: {st.session_state['gunluk_kayit']}"
-                    res = genai.GenerativeModel('gemini-2.0-flash').generate_content(p)
-                    st.info(res.text)
-                except: st.error("Error")
+# 3. KİLO SEKMESİ
+with tabs[2]:
+    cur_w = st.number_input(TXT['weight'], value=float(prof.get('current_weight') or 70))
+    if st.button(TXT['save']):
+        add_log_db('weight', {'kg': cur_w})
+        update_profile_db({'current_weight': cur_w})
+        st.success("Kilo kaydedildi!")
+        time.sleep(1); st.rerun()
+    
+    st.info("Veritabanı doldukça geçmiş grafiği burada belirecek.")
 
-# --- TAB 2: SU ---
-with tab_su:
-    st.subheader(TXT['water_title'])
-    with st.container(border=True):
-        hedef_su = user_data.get("manuel_su_hedefi") or int(profil["kilo"] * 35)
-        icerilen = st.session_state['su_ml']
+# 4. AYARLAR
+with tabs[3]:
+    st.header(TXT['settings'])
+    with st.form("settings_form"):
+        new_lang = st.selectbox("Language", ["TR", "EN", "AR"], index=["TR", "EN", "AR"].index(LANG))
+        new_name = st.text_input("Name", value=prof.get('full_name', ''))
+        new_age = st.number_input("Age", value=int(prof.get('age') or 25))
+        new_target = st.number_input("Target Weight", value=float(prof.get('target_weight') or 70))
         
-        st.markdown(f"<h1 style='text-align:center; color:#3B82F6; margin:0;'>{icerilen}</h1>", unsafe_allow_html=True)
-        st.markdown(f"<p style='text-align:center; margin:0;'>/ {hedef_su} ml</p>", unsafe_allow_html=True)
-        st.progress(min(icerilen/hedef_su, 1.0))
-        st.write("")
-        
-        b1, b2, b3 = st.columns(3)
-        with b1: 
-            if st.button(TXT['water_cup']): su_guncelle(200); st.rerun()
-        with b2: 
-            if st.button(TXT['water_bottle']): su_guncelle(500); st.rerun()
-        with b3: 
-            if st.button(TXT['water_remove']): su_guncelle(-200); st.rerun()
-
-        st.divider()
-        with st.expander(TXT['manual_add']):
-            m_val = st.number_input("ml", 0, 2000, 200, label_visibility="collapsed")
-            if st.button(TXT['add_btn'], key="man_su"): su_guncelle(m_val); st.rerun()
-
-# --- TAB 3: KİLO ---
-with tab_kilo:
-    st.subheader(TXT['weight_title'])
-    with st.container(border=True):
-        kg = st.number_input(TXT['weight'], value=float(profil["kilo"]), step=0.1)
-        if st.button(TXT['save']): kilo_ekle(kg); st.rerun()
-        st.write("")
-        if user_data["kilo_gecmisi"]:
-            df = pd.DataFrame(user_data["kilo_gecmisi"])
-            df["tarih"] = pd.to_datetime(df["tarih"])
-            st.line_chart(df.set_index("tarih"), height=250, color="#7C3AED")
-        else: st.info("Henüz veri yok.")
-
-# --- TAB 4: AYARLAR ---
-with tab_profil:
-    st.subheader(TXT['settings'])
-    with st.container(border=True):
-        yeni_dil = st.selectbox(TXT['lang_select'], ["TR", "EN", "AR"], index=["TR", "EN", "AR"].index(LANG))
-        n_isim = st.text_input(TXT['name_ask'], value=profil.get("isim", ""))
-        n_kilo = st.number_input(TXT['weight'], value=float(profil["kilo"]))
-        n_hedef = st.number_input(TXT['target_weight'], value=float(profil["hedef_kilo"]))
-        
-        if st.button(TXT['update']):
-            user_data["profil"].update({"isim":n_isim, "kilo":n_kilo, "hedef_kilo":n_hedef, "dil":yeni_dil})
-            kilo_ekle(n_kilo)
-            veri_kaydet(user_data)
-            st.success("OK!")
+        if st.form_submit_button(TXT['update']):
+            update_profile_db({
+                "language": new_lang, "full_name": new_name, 
+                "age": new_age, "target_weight": new_target
+            })
+            st.success("Profil güncellendi!")
             time.sleep(1); st.rerun()
-        st.divider()
-        if st.button(TXT['reset'], type="secondary"): os.remove(DOSYA_ADI); st.rerun()
+            
+    st.markdown("---")
+    if st.button(TXT['logout'], type="primary"):
+        logout()
